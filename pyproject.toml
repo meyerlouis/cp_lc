@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "latticecp"
+version = "1.0.0"
+description = "Multi-output conformal classification on product label lattices: certificate, family, safe selection"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "pandas>=1.5",
+  "scikit-learn>=1.2",
+  "openml>=0.14",
+  "matplotlib>=3.7",
+]
+
+[tool.setuptools.packages.find]
+include = ["latticecp*"]

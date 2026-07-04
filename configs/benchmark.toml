@@ -1,0 +1,35 @@
+# =====================================================================
+# The pre-registration artifact: every runtime knob of the benchmark in
+# one file. Family composition lives in latticecp.scores.FamilyConfig
+# and admission rules in latticecp.data.shortlist.ShortlistConfig
+# (single source of truth; do not duplicate them here).
+# =====================================================================
+[run]
+alphas   = [0.2, 0.1, 0.05, 0.02]
+seeds    = 10
+min_rows = 500
+small_n  = 2000            # below this, the small-n fold fractions apply
+
+[slices.marg]
+n_max        = 40000
+use_features = false
+
+[slices.logit]
+n_max        = 4000
+use_features = true
+max_support  = 512
+
+# standard fractions are the pipeline defaults (0.40/0.15/0.15/0.20/0.10
+# conditional; 0.40/0.15/0.20/0.25 unconditional). Small-n variants:
+[fractions_small.conditional]
+train = 0.35
+sel_threshold = 0.10
+sel_size = 0.10
+cal = 0.25
+test = 0.20
+
+[fractions_small.unconditional]
+train = 0.35
+sel_threshold = 0.10
+cal = 0.25
+test = 0.30
