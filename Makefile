@@ -24,7 +24,7 @@ quick:                      ## tiny local benchmark end-to-end (needs data cache
 	$(PY) stages/s05_analyze.py results/results_bench.csv | head -60
 
 verify-artifacts:           ## determinism check: frozen scan -> shortlist must match frozen shortlist
-	$(PY) stages/s02_make_shortlist.py --scan artifacts/master_scan.csv --check artifacts/shortlist.csv
+	$(PY) stages/s02_make_shortlist.py --scan artifacts/master_scan.csv.gz --check artifacts/shortlist.csv
 
 scan:                       ## EXPENSIVE full view scan from the frozen catalog (optional regen)
 	$(PY) stages/s01_scan_views.py --workers 8

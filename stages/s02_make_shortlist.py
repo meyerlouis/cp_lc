@@ -108,7 +108,7 @@ def compare(regen: pd.DataFrame, frozen: pd.DataFrame,
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--scan", default=str(ROOT / "artifacts" / "master_scan.csv"))
+    p.add_argument("--scan", default=str(ROOT / "artifacts" / "master_scan.csv.gz"))
     p.add_argument("--out", default=str(ROOT / "results" / "shortlist_regen.csv"))
     p.add_argument("--check", default=None,
                    help="frozen shortlist to compare against")
