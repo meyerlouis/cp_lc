@@ -47,14 +47,19 @@ def compare(regen: pd.DataFrame, frozen: pd.DataFrame,
           f"rows found in the frozen scan"
           + ("" if n_missing == 0 else "  [FAIL]"))
     ok &= n_missing == 0
+    # float columns: historical artifacts crossed CSV round-trips and
+    # library versions, so equality holds up to float representation;
+    # rtol 1e-9 passes last-bit noise and fails anything real.
     for col in ("n", "lattice", "n_per_cell", "delta3_debiased"):
         if f"{col}_scan" in merged:
             a = merged[col].to_numpy(float)
             b = merged[f"{col}_scan"].to_numpy(float)
-            same = ((a == b) | (np.isnan(a) & np.isnan(b))).all()
-            print(f"  frozen.{col} == scan.{col}: {bool(same)}"
-                  + ("" if same else "  [FAIL]"))
-            ok &= bool(same)
+            close = np.isclose(a, b, rtol=1e-9, atol=1e-12, equal_nan=True)
+            worst = float(np.nanmax(np.abs(a - b))) if len(a) else 0.0
+            print(f"  frozen.{col} ~ scan.{col}: {bool(close.all())} "
+                  f"(max|diff|={worst:.2e})"
+                  + ("" if close.all() else "  [FAIL]"))
+            ok &= bool(close.all())
 
     feasible = ((frozen.lattice >= 2) & (frozen.lattice <= config.lattice_max)
                 & (frozen.n_per_cell >= config.min_n_per_cell))
@@ -88,13 +93,16 @@ def compare(regen: pd.DataFrame, frozen: pd.DataFrame,
         x = inter[f"{col}_r"]; y = inter[f"{col}_f"]
         if x.dtype.kind in "fc" or y.dtype.kind in "fc":
             xv, yv = x.to_numpy(float), y.to_numpy(float)
-            equal = (xv == yv) | (np.isnan(xv) & np.isnan(yv))
+            equal = np.isclose(xv, yv, rtol=1e-9, atol=1e-12, equal_nan=True)
+            worst = float(np.nanmax(np.abs(xv - yv))) if len(xv) else 0.0
         else:
             equal = x.astype(str) == y.astype(str)
+            worst = None
         if not equal.all():
             ok = False
+            extra = "" if worst is None else f" (max|diff|={worst:.2e})"
             print(f"  [FAIL] {col}: {int((~equal).sum())} value mismatches "
-                  f"on shared keys")
+                  f"on shared keys{extra}")
     return ok
 
 
