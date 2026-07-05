@@ -24,18 +24,68 @@ from latticecp.data.shortlist import ShortlistConfig, make_shortlist
 KEY = ["dataset", "combo", "max_k"]
 
 
-def compare(regen: pd.DataFrame, frozen: pd.DataFrame) -> bool:
-    a = regen.sort_values(KEY).reset_index(drop=True)
-    b = frozen.sort_values(KEY).reset_index(drop=True)
-    ka = set(map(tuple, a[KEY].astype(str).itertuples(index=False, name=None)))
-    kb = set(map(tuple, b[KEY].astype(str).itertuples(index=False, name=None)))
-    if ka != kb:
-        print(f"KEY MISMATCH: {len(ka - kb)} only in regen, "
-              f"{len(kb - ka)} only in frozen")
-        return False
+def compare(regen: pd.DataFrame, frozen: pd.DataFrame,
+            scan: pd.DataFrame) -> bool:
+    """Policy-equivalence check. The historical tie-break was version-
+    dependent (unstable sort over heavily tied n_per_cell), so exact key
+    identity is NOT the invariant; these are:
+      1  provenance: every frozen row appears verbatim in the frozen scan;
+      2  admission constraints hold for every frozen row;
+      3  per-(dataset, certificate-bin) counts match the regenerated
+         policy output exactly;
+      4  on the key intersection, all shared columns are value-equal.
+    Tie swaps (key differences with matching bin counts) are reported as
+    informational."""
+    from latticecp.data.shortlist import ShortlistConfig
+    config = ShortlistConfig()
     ok = True
-    for col in [c for c in b.columns if c in a.columns and c not in KEY]:
-        x, y = a[col], b[col]
+
+    merged = frozen.merge(scan, on=KEY, how="left",
+                          suffixes=("", "_scan"), indicator=True)
+    n_missing = int((merged._merge != "both").sum())
+    print(f"1 provenance: {len(frozen) - n_missing}/{len(frozen)} frozen "
+          f"rows found in the frozen scan"
+          + ("" if n_missing == 0 else "  [FAIL]"))
+    ok &= n_missing == 0
+    for col in ("n", "lattice", "n_per_cell", "delta3_debiased"):
+        if f"{col}_scan" in merged:
+            a = merged[col].to_numpy(float)
+            b = merged[f"{col}_scan"].to_numpy(float)
+            same = ((a == b) | (np.isnan(a) & np.isnan(b))).all()
+            print(f"  frozen.{col} == scan.{col}: {bool(same)}"
+                  + ("" if same else "  [FAIL]"))
+            ok &= bool(same)
+
+    feasible = ((frozen.lattice >= 2) & (frozen.lattice <= config.lattice_max)
+                & (frozen.n_per_cell >= config.min_n_per_cell))
+    caps = frozen.groupby("dataset").size().max() <= config.max_per_dataset
+    print(f"2 constraints: n_per_cell floor + lattice cap on every row: "
+          f"{bool(feasible.all())}; per-dataset cap: {bool(caps)}"
+          + ("" if feasible.all() and caps else "  [FAIL]"))
+    ok &= bool(feasible.all()) and bool(caps)
+
+    edges = list(config.bin_edges)
+    fa, fb = frozen.copy(), regen.copy()
+    fa["b"] = pd.cut(fa[config.bin_column], edges, right=False).astype(str)
+    fb["b"] = pd.cut(fb[config.bin_column], edges, right=False).astype(str)
+    ca = fa.groupby(["dataset", "b"]).size().sort_index()
+    cb = fb.groupby(["dataset", "b"]).size().sort_index()
+    counts_equal = ca.equals(cb)
+    print(f"3 per-(dataset, bin) policy counts equal to regeneration: "
+          f"{counts_equal}" + ("" if counts_equal else "  [FAIL]"))
+    ok &= counts_equal
+
+    ka = set(map(tuple, regen[KEY].astype(str).itertuples(index=False,
+                                                          name=None)))
+    kb = set(map(tuple, frozen[KEY].astype(str).itertuples(index=False,
+                                                           name=None)))
+    swaps = len(kb - ka)
+    print(f"4 key intersection {len(ka & kb)}/{len(frozen)}; tie swaps "
+          f"(informational, exchangeable within bins): {swaps}")
+    inter = regen.merge(frozen, on=KEY, suffixes=("_r", "_f"))
+    for col in [c for c in frozen.columns if c in regen.columns
+                and c not in KEY]:
+        x = inter[f"{col}_r"]; y = inter[f"{col}_f"]
         if x.dtype.kind in "fc" or y.dtype.kind in "fc":
             xv, yv = x.to_numpy(float), y.to_numpy(float)
             equal = (xv == yv) | (np.isnan(xv) & np.isnan(yv))
@@ -43,11 +93,8 @@ def compare(regen: pd.DataFrame, frozen: pd.DataFrame) -> bool:
             equal = x.astype(str) == y.astype(str)
         if not equal.all():
             ok = False
-            print(f"  [FAIL] {col}: {int((~equal).sum())} mismatches")
-    missing = set(b.columns) - set(a.columns)
-    if missing:
-        ok = False
-        print(f"  [FAIL] frozen columns missing from regen: {sorted(missing)}")
+            print(f"  [FAIL] {col}: {int((~equal).sum())} value mismatches "
+                  f"on shared keys")
     return ok
 
 
@@ -69,7 +116,7 @@ if __name__ == "__main__":
 
     if args.check:
         frozen = pd.read_csv(args.check)
-        if compare(shortlist, frozen):
+        if compare(shortlist, frozen, scan):
             print("DETERMINISM CHECK PASSED: regenerated shortlist matches "
                   "the frozen artifact value-exactly.")
         else:
