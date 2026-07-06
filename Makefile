@@ -24,7 +24,7 @@ quick:                      ## tiny local benchmark end-to-end (needs data cache
 	$(PY) stages/s05_analyze.py results/results_bench.csv | head -60
 
 verify-artifacts:           ## determinism check: frozen scan -> shortlist must match frozen shortlist
-	$(PY) stages/s02_make_shortlist.py --scan artifacts/master_scan.csv.gz --check artifacts/shortlist.csv
+	$(PY) stages/s02_make_shortlist.py --scan artifacts/master_scan.csv --check artifacts/shortlist.csv
 
 scan:                       ## EXPENSIVE full view scan from the frozen catalog (optional regen)
 	$(PY) stages/s01_scan_views.py --workers 8
@@ -48,8 +48,11 @@ figures:
 audit:
 	$(PY) stages/s07_audit.py results/results_bench.csv
 
-diff-old:                   ## acceptance test: make diff-old OLD=/path/to/results_june.csv
+diff-old:                   ## exact rerun check under the frozen lock: make diff-old OLD=path
 	$(PY) scripts/diff_reproduction.py $(OLD) results/results_bench.csv
+
+replicate-old:              ## version-robustness exhibit vs an older run: make replicate-old OLD=path
+	$(PY) scripts/compare_replication.py $(OLD) results/results_bench.csv
 
 clean:
 	rm -rf results_bench logs/*.out logs/*.err

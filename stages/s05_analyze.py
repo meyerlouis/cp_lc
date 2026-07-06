@@ -20,6 +20,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+
+def spear(a, b):
+    """Version-tolerant Spearman correlation (scipy result API drift)."""
+    r = stats.spearmanr(a, b)
+    return float(getattr(r, "statistic", r[0]))
+
 pd.set_option("display.width", 200)
 
 VIEW = ["dataset", "combo", "max_k"]
@@ -106,9 +112,8 @@ v9["lac_vs_mahal"] = v9.size_lac / v9.size_reference.clip(lower=1e-12)
 print(v9.groupby(["forecaster", "alpha"]).lac_vs_mahal.agg(
     ["mean", "median"]).round(3))
 print("fraction of views where LAC is strictly smaller than Mahalanobis:")
-print(v9.groupby(["forecaster", "alpha"])
-      .apply(lambda g: float((g.size_lac < g.size_reference - 1e-9).mean()),
-             include_groups=False).round(3))
+v9["lac_smaller"] = (v9.size_lac < v9.size_reference - 1e-9).astype(float)
+print(v9.groupby(["forecaster", "alpha"]).lac_smaller.mean().round(3))
 
 print(f"\n{'=' * 70}\n10 A6 ABLATION: incumbent recalibrated on cal + sel\n"
       f"{'=' * 70}")
@@ -139,11 +144,11 @@ if len(lg):
 
     print(f"n = {len(lg)} views")
     print(f"spearman(gain, label d3) = "
-          f"{stats.spearmanr(lg.rel_gain, lg.delta3_view_debiased).statistic:+.3f}")
+          f"{spear(lg.rel_gain, lg.delta3_view_debiased):+.3f}")
     print(f"spearman(gain, Z)        = "
-          f"{stats.spearmanr(lg.rel_gain, lg.delta3Z_debiased).statistic:+.3f}")
+          f"{spear(lg.rel_gain, lg.delta3Z_debiased):+.3f}")
     print(f"spearman(Z, label d3)    = "
-          f"{stats.spearmanr(lg.delta3Z_debiased, lg.delta3_view_debiased).statistic:+.3f}")
+          f"{spear(lg.delta3Z_debiased, lg.delta3_view_debiased):+.3f}")
     print(f"partial (gain, Z | label d3)  = "
           f"{pcorr(r.rel_gain, r.delta3Z_debiased, r.delta3_view_debiased):+.3f}")
     print(f"partial (gain, label d3 | Z)  = "
